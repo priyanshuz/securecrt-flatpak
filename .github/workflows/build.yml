@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
     inputs:
       deb_url:
-        description: 'Direct download URL for scrt-*.deb (overrides SCRT_DEB_URL secret)'
+        description: 'Optional: direct download URL for scrt-*.deb (leave blank to use release asset)'
         required: false
         type: string
 
@@ -52,15 +52,23 @@ jobs:
 
       - name: Download SecureCRT .deb
         env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           DEB_URL: ${{ inputs.deb_url || vars.SCRT_DEB_URL || secrets.SCRT_DEB_URL }}
         run: |
-          if [ -z "$DEB_URL" ]; then
-            echo "ERROR: No .deb URL provided."
-            echo "Set the SCRT_DEB_URL repository variable/secret, or pass deb_url when running workflow_dispatch."
-            exit 1
+          if [ -n "$DEB_URL" ]; then
+            echo "Downloading .deb from URL..."
+            curl -fsSL -o "$(basename "$DEB_URL" | sed 's/?.*//')" "$DEB_URL"
+          else
+            echo "Downloading .deb from GitHub release assets..."
+            gh release download --repo "$GITHUB_REPOSITORY" \
+              --pattern "scrt-*.deb" --dir . || {
+              echo "ERROR: No scrt-*.deb found in any release asset and no DEB_URL provided."
+              echo ""
+              echo "To fix: upload scrt-*.deb as a release asset at:"
+              echo "  https://github.com/$GITHUB_REPOSITORY/releases"
+              exit 1
+            }
           fi
-          echo "Downloading .deb..."
-          curl -fsSL -o "$(basename "$DEB_URL" | sed 's/?.*//')" "$DEB_URL"
           ls -lh scrt-*.deb
 
       - name: Build Flatpak
