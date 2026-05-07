@@ -1,0 +1,21 @@
+# SecureCRT .deb — proprietary, must NOT be committed
+scrt-*.deb
+
+# Build outputs
+SecureCRT.flatpak
+build-dir/
+repo/
+host-libs/
+host-libs.tar.gz
+
+# Leftover deb extraction artifacts
+control.tar.zst
+data.tar.zst
+debian-binary
+*.tar.zst
+
+# flatpak-builder cache
+.flatpak-builder/
+
+# devcontainer (optional — remove this line if you want to commit it)
+.devcontainer/

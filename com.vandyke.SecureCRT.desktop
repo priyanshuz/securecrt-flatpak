@@ -1,0 +1,11 @@
+[Desktop Entry]
+Name=SecureCRT
+Comment=SSH, Telnet and Serial terminal emulator
+Exec=securecrt-wrapper
+Icon=com.vandyke.SecureCRT
+Terminal=false
+Type=Application
+Categories=Network;RemoteAccess;TerminalEmulator;
+Keywords=ssh;telnet;serial;terminal;networking;
+StartupNotify=true
+StartupWMClass=SecureCRT

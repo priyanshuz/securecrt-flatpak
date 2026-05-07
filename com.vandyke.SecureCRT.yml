@@ -1,0 +1,148 @@
+app-id: com.vandyke.SecureCRT
+runtime: org.freedesktop.Platform
+runtime-version: '24.08'
+sdk: org.freedesktop.Sdk
+command: securecrt-wrapper
+
+add-extensions:
+  org.gtk.Gtk3theme:
+    directory: share/runtime/gtk-3.0/themes
+    subdirectories: true
+    no-autodownload: true
+    version: '3.22'
+
+finish-args:
+  - --share=network
+  - --share=ipc
+  - --socket=x11
+  - --socket=wayland
+  - --socket=pulseaudio
+  - --device=all
+  - --filesystem=home
+  - --filesystem=/tmp
+  - --filesystem=~/.themes:ro
+  - --filesystem=xdg-config/gtk-3.0:ro
+  - --talk-name=org.freedesktop.Notifications
+  - --talk-name=ca.desrt.dconf
+  - --env=LD_LIBRARY_PATH=/app/lib:/app/lib/scrt:/app/lib/scrt/lib
+  - --env=QT_QPA_PLATFORM=xcb
+  - --env=QT_QPA_PLATFORM_PLUGIN_PATH=/app/lib/scrt/plugins/platforms
+  - --env=QT_PLUGIN_PATH=/app/lib/scrt/plugins
+  - --env=QT_QPA_PLATFORMTHEME=gtk3
+  - --env=GSETTINGS_SCHEMA_DIR=/app/share/glib-2.0/schemas
+
+modules:
+
+  # ── GLib schemas: runtime schemas + org.gnome.desktop.interface for libqgtk3 ──
+  - name: glib-schemas
+    buildsystem: simple
+    build-commands:
+      - mkdir -p /app/share/glib-2.0/schemas
+      - cp /usr/share/glib-2.0/schemas/*.xml /app/share/glib-2.0/schemas/ || true
+      - install -m644 org.gnome.desktop.interface.gschema.xml /app/share/glib-2.0/schemas/
+      - glib-compile-schemas /app/share/glib-2.0/schemas/
+    sources:
+      - type: file
+        path: org.gnome.desktop.interface.gschema.xml
+
+  # ── System libraries needed by SecureCRT ──────────────────────────────────
+  - name: system-libs
+    buildsystem: simple
+    build-commands:
+      - mkdir -p /app/lib
+      - tar xzf host-libs.tar.gz
+      - cp -a host-libs/. /app/lib/
+    sources:
+      - type: file
+        path: host-libs.tar.gz
+
+  # ── SecureCRT binary with bundled libraries ────────────────────────────────
+  - name: securecrt
+    buildsystem: simple
+    build-commands:
+      - ar x scrt-*.deb
+      - mkdir -p scrtroot
+      - tar xf data.tar.* -C scrtroot/
+      - install -Dm755 scrtroot/usr/bin/SecureCRT /app/bin/SecureCRT
+      - mkdir -p /app/share/runtime/gtk-3.0/themes
+      - mkdir -p /app/share
+      - ln -sfn /app/share/runtime/gtk-3.0/themes /app/share/themes
+      - |
+        if [ -d scrtroot/usr/lib/scrt ]; then
+          mkdir -p /app/lib/scrt
+          cp -r scrtroot/usr/lib/scrt/* /app/lib/scrt/
+        fi
+      - mkdir -p /app/bin
+      - ln -sf /app/lib/scrt/plugins/platformthemes /app/bin/platformthemes
+      - ln -sf /app/lib/scrt/plugins/styles /app/bin/styles
+      - |
+        cat > /app/bin/securecrt-wrapper << 'EOF'
+        #!/bin/bash
+        export LD_LIBRARY_PATH=/app/lib:/app/lib/scrt:/app/lib/scrt/lib:$LD_LIBRARY_PATH
+        export QT_QPA_PLATFORM=xcb
+        export QT_QPA_PLATFORM_PLUGIN_PATH=/app/lib/scrt/plugins/platforms
+        export QT_PLUGIN_PATH=/app/lib/scrt/plugins
+        export QT_QPA_PLATFORMTHEME=gtk3
+        export GSETTINGS_SCHEMA_DIR=/app/share/glib-2.0/schemas
+        # ── Theme detection ───────────────────────────────────────────────────
+        _THEMES_DIR=/app/share/runtime/gtk-3.0/themes
+        _SCHEME=""
+        _THEME=""
+        if command -v gdbus &>/dev/null; then
+          _SCHEME_RAW=$(gdbus call --session \
+            --dest org.freedesktop.portal.Desktop \
+            --object-path /org/freedesktop/portal/desktop \
+            --method org.freedesktop.portal.Settings.Read \
+            "org.freedesktop.appearance" "color-scheme" 2>/dev/null || true)
+          # Use sed to extract the number after "uint32 " — avoids matching "32" in "uint32"
+          _SCHEME=$(printf '%s\n' "$_SCHEME_RAW" | sed -n 's/.*uint32 \([0-9]*\).*/\1/p')
+          _THEME_RAW=$(gdbus call --session \
+            --dest org.freedesktop.portal.Desktop \
+            --object-path /org/freedesktop/portal/desktop \
+            --method org.freedesktop.portal.Settings.Read \
+            "org.gnome.desktop.interface" "gtk-theme" 2>/dev/null || true)
+          _THEME=$(printf '%s\n' "$_THEME_RAW" | grep -o "'[^']*'" | head -1 | tr -d "'")
+        fi
+        if [ "$_SCHEME" = "1" ]; then
+          # Dark mode — use theme name if it already ends in -dark/-Dark, else find dark variant
+          case "$_THEME" in
+            *-[Dd]ark)
+              _CANON=$(find "$_THEMES_DIR" -mindepth 1 -maxdepth 1 -type d -printf '%f\n' \
+                | awk -v w="$_THEME" 'tolower($0)==tolower(w){print;exit}')
+              export GTK_THEME="${_CANON:-Adwaita-dark}"
+              ;;
+            *)
+              _DARK="${_THEME}-dark"
+              _CANON=$(find "$_THEMES_DIR" -mindepth 1 -maxdepth 1 -type d -printf '%f\n' \
+                | awk -v w="$_DARK" 'tolower($0)==tolower(w){print;exit}')
+              export GTK_THEME="${_CANON:-Adwaita-dark}"
+              ;;
+          esac
+          export GTK_APPLICATION_PREFER_DARK_THEME=1
+        elif [ -n "$_THEME" ]; then
+          _CANON=$(find "$_THEMES_DIR" -mindepth 1 -maxdepth 1 -type d -printf '%f\n' \
+            | awk -v w="$_THEME" 'tolower($0)==tolower(w){print;exit}')
+          [ -n "$_CANON" ] && export GTK_THEME="$_CANON"
+        fi
+        # Write settings.ini as a direct GTK3 override (highest priority)
+        if [ -n "$GTK_THEME" ]; then
+          mkdir -p "$HOME/.config/gtk-3.0"
+          printf '[Settings]\ngtk-theme-name=%s\ngtk-application-prefer-dark-theme=%s\n' \
+            "$GTK_THEME" "${GTK_APPLICATION_PREFER_DARK_THEME:-0}" \
+            > "$HOME/.config/gtk-3.0/settings.ini"
+        fi
+        exec /app/bin/SecureCRT "$@"
+        EOF
+      - chmod +x /app/bin/securecrt-wrapper
+      - install -Dm644 com.vandyke.SecureCRT.desktop
+          /app/share/applications/com.vandyke.SecureCRT.desktop
+      - install -Dm644 scrtroot/usr/share/vandyke/data/securecrt_64.png
+          /app/share/icons/hicolor/64x64/apps/com.vandyke.SecureCRT.png
+    sources:
+      - type: file
+        path: scrt-9.7.2-3858.ubuntu24-64.x86_64.deb
+      - type: file
+        path: com.vandyke.SecureCRT.desktop
+      - type: shell
+        commands:
+          - mkdir -p scrtroot

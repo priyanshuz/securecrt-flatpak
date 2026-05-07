@@ -1,0 +1,74 @@
+name: Build SecureCRT Flatpak
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - 'README.md'
+      - 'SecureCRT_Flatpak_PRD.md'
+  workflow_dispatch:
+    inputs:
+      deb_url:
+        description: 'Direct download URL for scrt-*.deb (overrides SCRT_DEB_URL secret)'
+        required: false
+        type: string
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    # Skip automated push builds if the deb URL secret isn't configured
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'push' && vars.SCRT_DEB_URL != '')
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            flatpak flatpak-builder binutils elfutils \
+            libglib2.0-bin glib-compile-schemas
+
+      - name: Add Flathub remote
+        run: |
+          sudo flatpak remote-add --if-not-exists flathub \
+            https://dl.flathub.org/repo/flathub.flatpakrepo
+
+      - name: Cache Flatpak runtimes
+        uses: actions/cache@v4
+        with:
+          path: ~/.local/share/flatpak
+          key: flatpak-runtime-freedesktop-24.08-${{ runner.os }}
+
+      - name: Install Flatpak runtime and SDK
+        run: |
+          flatpak install -y --user flathub \
+            org.freedesktop.Platform//24.08 \
+            org.freedesktop.Sdk//24.08 \
+            org.gtk.Gtk3theme.Adwaita//3.22 || true
+
+      - name: Download SecureCRT .deb
+        env:
+          DEB_URL: ${{ inputs.deb_url || vars.SCRT_DEB_URL || secrets.SCRT_DEB_URL }}
+        run: |
+          if [ -z "$DEB_URL" ]; then
+            echo "ERROR: No .deb URL provided."
+            echo "Set the SCRT_DEB_URL repository variable/secret, or pass deb_url when running workflow_dispatch."
+            exit 1
+          fi
+          echo "Downloading .deb..."
+          curl -fsSL -o "$(basename "$DEB_URL" | sed 's/?.*//')" "$DEB_URL"
+          ls -lh scrt-*.deb
+
+      - name: Build Flatpak
+        run: bash build.sh
+
+      - name: Upload Flatpak bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: SecureCRT-flatpak
+          path: SecureCRT.flatpak
+          retention-days: 30
