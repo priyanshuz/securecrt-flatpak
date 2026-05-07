@@ -17,6 +17,5 @@ debian-binary
 # flatpak-builder cache
 .flatpak-builder/
 
-# devcontainer (optional — remove this line if you want to commit it)
-.devcontainer/
+
 SecureCRT_Flatpak_PRD.md

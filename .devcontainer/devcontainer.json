@@ -1,0 +1,20 @@
+{
+  "name": "SecureCRT Flatpak Builder",
+  "build": {
+    "context": "..",
+    "dockerfile": "Dockerfile"
+  },
+  "workspaceMount": "source=${localWorkspaceFolder},target=/workspace,type=bind,consistency=delegated",
+  "workspaceFolder": "/workspace",
+  "runArgs": [
+    "--privileged"
+  ],
+  "postCreateCommand": "flatpak list --system | grep freedesktop && echo 'Dev container ready.'",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "redhat.vscode-yaml"
+      ]
+    }
+  }
+}
