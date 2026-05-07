@@ -17,7 +17,7 @@ finish-args:
   - --socket=x11
   - --socket=wayland
   - --socket=pulseaudio
-  - --device=all
+  - --device=dri
   - --filesystem=home
   - --filesystem=/tmp
   - --filesystem=~/.themes:ro

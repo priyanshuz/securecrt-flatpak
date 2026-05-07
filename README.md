@@ -6,8 +6,20 @@ Packages [SecureCRT](https://www.vandyke.com/products/securecrt/) as a Flatpak w
 
 - Picks up the host GTK theme automatically via XDG Desktop Portal — no hardwired theme names
 - Dark mode works: reads `org.freedesktop.appearance color-scheme` and selects the correct `-dark` theme variant
-- Ships necessary compatibility libs (`libicu`, `libkrb5`, `libjpeg`) so it runs on any freedesktop-runtime host
+- Ships necessary compatibility libs (`libicu`, `libkrb5`, `libjpeg`, `libxcb-cursor`) so it runs on any freedesktop-runtime host
 - Bundles the GLib schema for `org.gnome.desktop.interface` so `libqgtk3.so` can read theme settings inside the sandbox
+
+## Scope and Security Model
+
+- This package is intentionally a **clean sandboxed SecureCRT app**
+- It does **not** expose all host binaries into the SecureCRT local shell
+- It does **not** include host-command bridge shims (`docker`, `sudo`, `systemctl`, etc.)
+
+Why:
+
+- Running host binaries directly from `/run/host/...` can fail due to host/runtime ABI mismatches (for example GLIBC version differences)
+- Host-command bridging expands privileges and increases attack surface
+- Keeping SecureCRT focused on UI + session workflow gives predictable behavior across systems
 
 ## Requirements
 
@@ -31,10 +43,10 @@ Output: `SecureCRT.flatpak`
 ## Installing
 
 ```bash
-sudo flatpak install --system --reinstall ./SecureCRT.flatpak
+flatpak install --user --reinstall ./SecureCRT.flatpak
 
 # Install your GTK theme extension (replace with your theme)
-sudo flatpak install flathub org.gtk.Gtk3theme.Yaru-Blue-dark
+flatpak install --user flathub org.gtk.Gtk3theme.Yaru-Blue-dark
 ```
 
 ## Running

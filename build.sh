@@ -43,6 +43,7 @@ NEEDED_LIBS=(
   libkrb5support.so.0
   libkeyutils.so.1
   libpcre2-16.so.0
+  libxcb-cursor.so.0
   libjpeg.so.8
 )
 
